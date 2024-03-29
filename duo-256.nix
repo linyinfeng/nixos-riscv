@@ -47,8 +47,7 @@ let
   version = "5.10.4";
   src = "${duo-buildroot-sdk}/linux_${lib.versions.majorMinor version}";
 
-  configfile = pkgs.writeText "milkv-duo-256-linux-config"
-    (builtins.readFile ./prebuilt/duo-256-kernel-config.txt);
+  configfile = ./prebuilt/duo-256-kernel-config.txt;
 
   kernel = (pkgs.linuxManualConfig {
     inherit version src configfile;
