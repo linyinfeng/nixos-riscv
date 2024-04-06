@@ -47,13 +47,15 @@ let
   version = "5.10.4";
   src = "${duo-buildroot-sdk}/linux_${lib.versions.majorMinor version}";
 
-  configfile = ./prebuilt/duo-256-kernel-config.txt;
+  kernelConfig = import ./prebuilt/duo-256-kernel-config.nix { inherit lib; };
 
-  kernel = (pkgs.linuxManualConfig {
-    inherit version src configfile;
-    allowImportFromDerivation = true;
-  }).overrideAttrs {
-    preConfigure = ''
+  kernel = (pkgs.buildLinux {
+    inherit version src;
+    enableCommonConfig = false;
+    structuredExtraConfig = kernelConfig;
+    autoModules = false;
+  }).overrideAttrs (old: {
+    preConfigure = (old.preConfigure or "") + ''
       substituteInPlace arch/riscv/Makefile \
         --replace '-mno-ldd' "" \
         --replace 'KBUILD_CFLAGS += -march=$(riscv-march-cflags-y)' \
@@ -61,7 +63,7 @@ let
         --replace 'KBUILD_AFLAGS += -march=$(riscv-march-aflags-y)' \
                   'KBUILD_AFLAGS += -march=$(riscv-march-aflags-y)_zicsr_zifencei'
     '';
-  };
+  });
 in
 {
 
@@ -74,8 +76,8 @@ in
   ];
 
   nixpkgs = {
-    localSystem.config = "x86_64-unknown-linux-gnu";
-    crossSystem.config = "riscv64-unknown-linux-gnu";
+    buildPlatform.system = "x86_64-linux";
+    hostPlatform.system = "riscv64-linux";
   };
 
   boot.kernelPackages = pkgs.linuxPackagesFor kernel;
@@ -251,4 +253,20 @@ in
     '';
   };
 
+  passthru = {
+    inherit duo-buildroot-sdk;
+    buildConfigNix = pkgs.writeShellApplication {
+      name = "build-config-nix";
+      text = ''
+        pwd
+        tmp=$(mktemp -t duo-256-kernel-config.nix.new.XXXXXX)
+        nix run github:linyinfeng/conf2nix#conf2nix-wrapper -- \
+          prebuilt/duo-256-kernel-config.txt \
+          --arg kernel 'let nr = (builtins.getFlake (toString ./.)); in nr.nixosConfigurations.duo-256.config.boot.kernelPackages.kernel' \
+          --argstr preset standalone \
+        >"$tmp"
+        cp "$tmp" prebuilt/duo-256-kernel-config.nix
+      '';
+    };
+  };
 }
